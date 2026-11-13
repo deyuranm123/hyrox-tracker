@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Hyrox Tracker',
-  description: 'Track Hyrox sessions for athletes and coaches.',
+  title: 'RŌXCOACH — The HYROX Coaching Operating System',
+  description: 'The B2B SaaS coaching platform for HYROX coaches. Roster command centre, 8-station performance engine, and athlete mobile companion.',
 };
 
 export const viewport = {
