@@ -29,7 +29,7 @@ export default function AthleteHome() {
         .order('created_at', { ascending: false }),
       supabase
         .from('coach_athletes')
-        .select('coach_id, status, profiles!coach_athletes_coach_id_fkey(name)')
+        .select('coach_id, status, profiles!coach_athletes_coach_id_fkey(full_name)')
         .eq('athlete_id', profile.id)
         .eq('status', 'pending'),
     ]);
@@ -66,14 +66,14 @@ export default function AthleteHome() {
 
   return (
     <>
-      <Header title={`Hi ${profile.name || 'athlete'}`} />
+      <Header title={`Hi ${profile.full_name || 'athlete'}`} />
 
       {requests.length > 0 && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Coach requests</h2>
           {requests.map((r) => (
             <div key={r.coach_id} className="row" style={{ marginBottom: 8 }}>
-              <span style={{ flex: 1 }}>{r.profiles?.name || 'A coach'} wants to see your sessions.</span>
+              <span style={{ flex: 1 }}>{r.profiles?.full_name || 'A coach'} wants to see your sessions.</span>
               <button onClick={() => respond(r.coach_id, true)}>Accept</button>
               <button className="secondary" onClick={() => respond(r.coach_id, false)}>Decline</button>
             </div>

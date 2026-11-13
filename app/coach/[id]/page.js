@@ -18,7 +18,7 @@ export default function AthleteDetail() {
     if (!profile) return;
     (async () => {
       const [{ data: a }, { data: s, error: sErr }] = await Promise.all([
-        supabase.from('profiles').select('name, email').eq('id', athleteId).single(),
+        supabase.from('profiles').select('full_name, email').eq('id', athleteId).single(),
         supabase
           .from('sessions')
           .select('id, session_date, type, total_time_sec, station_results(leg, time_sec)')
@@ -43,7 +43,7 @@ export default function AthleteDetail() {
 
   return (
     <>
-      <Header title={athlete?.name || athlete?.email || 'Athlete'} />
+      <Header title={athlete?.full_name || athlete?.email || 'Athlete'} />
       {error && <p className="error">{error}</p>}
 
       <div className="card">

@@ -23,7 +23,7 @@ export default function CoachRoster() {
   async function load() {
     const { data: links, error } = await supabase
       .from('coach_athletes')
-      .select('athlete_id, status, profiles!coach_athletes_athlete_id_fkey(name, email)')
+      .select('athlete_id, status, profiles!coach_athletes_athlete_id_fkey(full_name, email)')
       .eq('coach_id', profile.id);
     if (error) return setError(error.message);
 
@@ -77,7 +77,7 @@ export default function CoachRoster() {
 
   return (
     <>
-      <Header title={`Coach ${profile.name || ''}`.trim()} />
+      <Header title={`Coach ${profile.full_name || ''}`.trim()} />
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Add an athlete</h2>
@@ -118,10 +118,10 @@ export default function CoachRoster() {
                     <td>
                       {row.status === 'accepted' ? (
                         <Link href={`/coach/${row.athlete_id}`}>
-                          {row.profiles?.name || row.profiles?.email}
+                          {row.profiles?.full_name || row.profiles?.email}
                         </Link>
                       ) : (
-                        row.profiles?.name || row.profiles?.email
+                        row.profiles?.full_name || row.profiles?.email
                       )}
                     </td>
                     <td>{row.status === 'accepted' ? 'Active' : 'Waiting for athlete'}</td>
