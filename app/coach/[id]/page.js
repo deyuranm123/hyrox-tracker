@@ -11,6 +11,7 @@ import {
   getAthletePrescriptions,
   createWorkoutPrescription,
   calculatePrescriptionCompliance,
+  saveCoachFeedback,
 } from '../../../lib/data';
 import { generateAdaptiveWorkout } from '../../../lib/ai/workout-generator';
 
@@ -44,6 +45,13 @@ export default function AthleteDetail() {
   const [coachingNotes, setCoachingNotes] = useState('');
   const [targetTimeStr, setTargetTimeStr] = useState('1:15:00');
   const [submittingPrescription, setSubmittingPrescription] = useState(false);
+
+  // Debrief & Feedback Modal State
+  const [debriefSession, setDebriefSession] = useState(null);
+  const [generalFeedbackInput, setGeneralFeedbackInput] = useState('');
+  const [recommendationsInput, setRecommendationsInput] = useState('');
+  const [savingFeedback, setSavingFeedback] = useState(false);
+  const [feedbackSuccessMsg, setFeedbackSuccessMsg] = useState('');
 
   useEffect(() => {
     if (!profile || !athleteId) return;
@@ -101,6 +109,34 @@ export default function AthleteDetail() {
       alert('Failed to publish prescription: ' + (err.message || err));
     } finally {
       setSubmittingPrescription(false);
+    }
+  }
+
+  async function handleSaveDebrief(e) {
+    e.preventDefault();
+    if (!profile?.id || !athleteId || !debriefSession) return;
+
+    setSavingFeedback(true);
+    try {
+      await saveCoachFeedback({
+        coachId: profile.id,
+        athleteId,
+        sessionId: debriefSession.id,
+        generalFeedback: generalFeedbackInput,
+        recommendations: recommendationsInput,
+      });
+
+      setFeedbackSuccessMsg('✓ Feedback debrief posted to athlete dashboard!');
+      setTimeout(() => {
+        setFeedbackSuccessMsg('');
+        setDebriefSession(null);
+        setGeneralFeedbackInput('');
+        setRecommendationsInput('');
+      }, 1500);
+    } catch (err) {
+      alert('Failed to save debrief: ' + (err.message || err));
+    } finally {
+      setSavingFeedback(false);
     }
   }
 
@@ -395,6 +431,20 @@ export default function AthleteDetail() {
                 })}
               </tbody>
             </table>
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                className="primary"
+                style={{ padding: '6px 14px', fontSize: '0.82rem' }}
+                onClick={() => {
+                  setDebriefSession(s);
+                  setGeneralFeedbackInput('');
+                  setRecommendationsInput('');
+                }}
+              >
+                💬 Post Coach Debrief
+              </button>
+            </div>
           </details>
         ))}
       </div>
@@ -476,6 +526,71 @@ export default function AthleteDetail() {
                 </button>
                 <button type="submit" disabled={submittingPrescription} className="primary" style={{ padding: '10px 20px' }}>
                   {submittingPrescription ? 'Publishing...' : 'Publish Prescription'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Coach Debrief & Split Comments Modal */}
+      {debriefSession && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div className="card" style={{ maxWidth: 580, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <span className="transfer-badge transfer-high" style={{ marginBottom: 4 }}>Coach Debrief</span>
+                <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
+                  Debrief Workout ({debriefSession.session_date})
+                </h3>
+              </div>
+              <button onClick={() => setDebriefSession(null)} className="secondary" style={{ padding: '4px 10px' }}>✕</button>
+            </div>
+
+            {feedbackSuccessMsg && (
+              <div className="alert alert-success" style={{ marginBottom: 14 }}>
+                {feedbackSuccessMsg}
+              </div>
+            )}
+
+            <p className="muted" style={{ fontSize: '0.84rem', marginBottom: 16 }}>
+              Provide structured performance feedback on this {formatSeconds(debriefSession.total_time_sec)} simulation. Attached directly to the athlete&apos;s workout record.
+            </p>
+
+            <form onSubmit={handleSaveDebrief} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Performance Observations & Pacing Review
+                </label>
+                <textarea
+                  value={generalFeedbackInput}
+                  onChange={(e) => setGeneralFeedbackInput(e.target.value)}
+                  placeholder="e.g. Your compromised run pace held remarkably steady at 4:35/km. However, you lost 40s during the Wall Ball transition. Focus on immediate breathing resets."
+                  rows={4}
+                  required
+                  style={{ width: '100%', padding: '10px 12px', fontSize: '0.84rem' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Recommendations for Next Sessions
+                </label>
+                <textarea
+                  value={recommendationsInput}
+                  onChange={(e) => setRecommendationsInput(e.target.value)}
+                  placeholder="e.g. Program 3 sets of 25 unbroken wall ball thrusters after 800m threshold repeats on Wednesday."
+                  rows={2}
+                  style={{ width: '100%', padding: '10px 12px', fontSize: '0.84rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
+                <button type="button" onClick={() => setDebriefSession(null)} className="secondary">
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingFeedback} className="primary" style={{ padding: '10px 20px' }}>
+                  {savingFeedback ? 'Posting...' : 'Post Coach Debrief'}
                 </button>
               </div>
             </form>

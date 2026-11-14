@@ -37,6 +37,9 @@ export default function Header({ title, role }) {
           <Link href="/athlete/workouts/generate" className={`nav-link ${pathname?.includes('/workouts') ? 'active' : ''}`}>
             ⚡ Build Workout
           </Link>
+          <Link href="/athlete/programmes" className={`nav-link ${pathname?.includes('/programmes') ? 'active' : ''}`}>
+            📋 Programmes
+          </Link>
           <Link href="/athlete/equipment" className={`nav-link ${pathname === '/athlete/equipment' ? 'active' : ''}`}>
             🎒 Equipment
           </Link>
@@ -50,6 +53,9 @@ export default function Header({ title, role }) {
         <nav className="nav-links">
           <Link href="/coach" className={`nav-link ${pathname === '/coach' ? 'active' : ''}`}>
             Command Centre
+          </Link>
+          <Link href="/coach/programmes" className={`nav-link ${pathname?.includes('/programmes') ? 'active' : ''}`}>
+            📋 Programme Builder
           </Link>
         </nav>
       )}

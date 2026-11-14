@@ -13,6 +13,8 @@ import {
   deleteWorkoutSession,
   inviteCoachByEmail,
   getAthletePrescriptions,
+  getAthleteFeedback,
+  athleteRespondToFeedback,
 } from '../../lib/data';
 
 function AthleteDashboardContent() {
@@ -30,6 +32,8 @@ function AthleteDashboardContent() {
     totalCompleted: 0,
   });
   const [prescriptions, setPrescriptions] = useState([]);
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [replyInputs, setReplyInputs] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showSavedBanner, setShowSavedBanner] = useState(Boolean(savedSuccess));
@@ -48,17 +52,36 @@ function AthleteDashboardContent() {
   async function loadDashboard() {
     try {
       setLoading(true);
-      const [res, prescList] = await Promise.all([
+      const [res, prescList, fbList] = await Promise.all([
         getAthleteDashboardData(profile.id),
         getAthletePrescriptions(profile.id),
+        getAthleteFeedback(profile.id),
       ]);
       setData(res);
       setPrescriptions(prescList || []);
+      setFeedbackList(fbList || []);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load athlete dashboard');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSendReply(feedbackId) {
+    const text = replyInputs[feedbackId];
+    if (!text || !text.trim()) return;
+
+    try {
+      await athleteRespondToFeedback({
+        feedbackId,
+        athleteId: profile.id,
+        response: text.trim(),
+      });
+      setReplyInputs((prev) => ({ ...prev, [feedbackId]: '' }));
+      await loadDashboard();
+    } catch (err) {
+      alert('Failed to send reply: ' + (err.message || err));
     }
   }
 
@@ -408,6 +431,82 @@ function AthleteDashboardContent() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Coach Feedback & Debrief Notes (Two-Way Coaching) */}
+      {feedbackList.length > 0 && (
+        <div className="card" style={{ border: '1px solid var(--teal-primary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: '1.2rem' }}>💬</span>
+              <h2 className="card-title" style={{ margin: 0 }}>
+                Coach Feedback & Session Debriefs ({feedbackList.length})
+              </h2>
+            </div>
+            {feedbackList.some((f) => !f.is_read_by_athlete) && (
+              <span className="badge badge-pending">New Unread Feedback</span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {feedbackList.map((fb) => (
+              <div
+                key={fb.id}
+                style={{
+                  background: 'var(--bg-navy)',
+                  borderRadius: 8,
+                  padding: 14,
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, color: 'var(--teal-primary)', fontSize: '0.9rem' }}>
+                    Coach Observation
+                  </span>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {new Date(fb.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: 8, whiteSpace: 'pre-line' }}>
+                  {fb.general_feedback}
+                </div>
+
+                {fb.recommendations && (
+                  <div style={{ fontSize: '0.82rem', color: 'var(--gold-hyrox)', background: 'rgba(245, 158, 11, 0.08)', padding: '8px 10px', borderRadius: 6, marginBottom: 10 }}>
+                    🎯 <strong>Next Action:</strong> {fb.recommendations}
+                  </div>
+                )}
+
+                {/* Athlete Reply Thread */}
+                {fb.athlete_response ? (
+                  <div style={{ borderLeft: '2px solid var(--teal-primary)', paddingLeft: 10, marginTop: 8, fontSize: '0.82rem' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>You replied:</span>{' '}
+                    <span style={{ color: 'var(--text-primary)' }}>{fb.athlete_response}</span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <input
+                      type="text"
+                      placeholder="Type a reply or question to your coach..."
+                      value={replyInputs[fb.id] || ''}
+                      onChange={(e) => setReplyInputs({ ...replyInputs, [fb.id]: e.target.value })}
+                      style={{ flex: 1, padding: '6px 10px', fontSize: '0.82rem' }}
+                    />
+                    <button
+                      type="button"
+                      className="primary"
+                      style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                      onClick={() => handleSendReply(fb.id)}
+                    >
+                      Reply
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

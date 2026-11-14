@@ -12,6 +12,7 @@ import {
 } from '../lib/ai/substitution-engine.js';
 import { generateAdaptiveWorkout } from '../lib/ai/workout-generator.js';
 import { calculatePrescriptionCompliance } from '../lib/data.js';
+import { PROGRAMME_TEMPLATES, buildCustomizedProgramme } from '../lib/ai/programme-generator.js';
 
 function runTests() {
   console.log('================================================================');
@@ -91,6 +92,27 @@ function runTests() {
   assert(compliance.completedCount === 3, `Completed count correctly calculated (expected 3, got ${compliance.completedCount})`);
   assert(compliance.upcomingCount === 1, `Upcoming future prescriptions isolated (expected 1, got ${compliance.upcomingCount})`);
   assert(compliance.compliancePct === 75, `Compliance rate correctly calculated: ${compliance.compliancePct}% (expected 75%)`);
+
+  // TEST 7: Scenario 9 — Multi-Week Training Programme Generation
+  assert(PROGRAMME_TEMPLATES.length === 4, `4 Foundational programme templates defined (${PROGRAMME_TEMPLATES.length})`);
+  const foundation12Wk = buildCustomizedProgramme({
+    templateCategory: 'foundation_12wk',
+    athleteAbility: 'intermediate',
+    availableDaysPerWeek: 4,
+    availableEquipment: ['bodyweight', 'running_shoes', 'dumbbells'],
+  });
+
+  assert(foundation12Wk.weeks.length === 12, '12-week programme contains exactly 12 periodized weeks');
+  assert(foundation12Wk.deloadWeeks.includes(4) && foundation12Wk.deloadWeeks.includes(8), 'Scheduled recovery deloads built on weeks 4 & 8');
+  assert(foundation12Wk.weeks[3].isDeload === true, 'Week 4 properly flagged as deload week');
+  assert(foundation12Wk.weeks[3].sessions.length === 4, 'Deload week contains appropriate session count (4)');
+
+  const beginner8Wk = buildCustomizedProgramme({
+    templateCategory: 'beginner_8wk',
+    athleteAbility: 'beginner',
+    availableDaysPerWeek: 3,
+  });
+  assert(beginner8Wk.weeks.length === 8, '8-week beginner programme contains exactly 8 weeks');
 
   console.log('\n================================================================');
   console.log(`TEST SUMMARY: ${passed} / ${total} tests passed successfully.`);
