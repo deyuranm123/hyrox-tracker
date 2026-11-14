@@ -11,6 +11,7 @@ import {
   auditStationReadiness,
 } from '../lib/ai/substitution-engine.js';
 import { generateAdaptiveWorkout } from '../lib/ai/workout-generator.js';
+import { calculatePrescriptionCompliance } from '../lib/data.js';
 
 function runTests() {
   console.log('================================================================');
@@ -74,6 +75,22 @@ function runTests() {
   const sledSubs = findSubstitutesForStation('sled_push', minimalGear, 'open_floor');
   assert(sledSubs.length >= 2, `Found ${sledSubs.length} alternative options for sled push`);
   assert(sledSubs[0].transferScore >= sledSubs[1].transferScore, 'Substitutions properly ranked by transfer score descending');
+
+  // TEST 6: Scenario 4 & 6 — Prescribed vs Completed Compliance Engine
+  const testPrescriptions = [
+    { id: 'p1', scheduled_date: '2026-11-10', status: 'completed' },
+    { id: 'p2', scheduled_date: '2026-11-12', status: 'completed' },
+    { id: 'p3', scheduled_date: '2026-11-14', status: 'completed' },
+    { id: 'p4', scheduled_date: '2026-11-14', status: 'published' }, // 3 completed out of 4 due => 75%
+    { id: 'p5', scheduled_date: '2026-11-20', status: 'published' }, // future date -> not counted in due
+    { id: 'p6', scheduled_date: '2026-11-11', status: 'cancelled' }, // cancelled -> ignored
+  ];
+
+  const compliance = calculatePrescriptionCompliance(testPrescriptions);
+  assert(compliance.dueCount === 4, `Due count correctly calculated (expected 4, got ${compliance.dueCount})`);
+  assert(compliance.completedCount === 3, `Completed count correctly calculated (expected 3, got ${compliance.completedCount})`);
+  assert(compliance.upcomingCount === 1, `Upcoming future prescriptions isolated (expected 1, got ${compliance.upcomingCount})`);
+  assert(compliance.compliancePct === 75, `Compliance rate correctly calculated: ${compliance.compliancePct}% (expected 75%)`);
 
   console.log('\n================================================================');
   console.log(`TEST SUMMARY: ${passed} / ${total} tests passed successfully.`);

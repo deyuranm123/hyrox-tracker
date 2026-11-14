@@ -1,17 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Header from '../../../components/Header';
 import { LEGS, parseTime, formatSeconds, formatAsTimeInput, validateAllLegs } from '../../../lib/format';
 import { useProfile } from '../../../lib/useProfile';
-import { saveWorkoutSession } from '../../../lib/data';
+import { saveWorkoutSession, updatePrescriptionStatus } from '../../../lib/data';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function LogSession() {
+function LogSessionContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prescriptionId = searchParams.get('prescriptionId');
+  const targetTimeParam = searchParams.get('target');
+
   const { profile, loading } = useProfile('athlete');
   const [date, setDate] = useState(today());
   const [category, setCategory] = useState('full_simulation');
@@ -75,6 +79,16 @@ export default function LogSession() {
         splits: times,
       });
 
+      // If fulfilling a coach's prescription, mark it completed
+      if (prescriptionId) {
+        await updatePrescriptionStatus({
+          prescriptionId,
+          athleteId: profile.id,
+          status: 'completed',
+          completedSessionId: result.sessionId,
+        });
+      }
+
       router.push(`/athlete?saved=true&total=${encodeURIComponent(result.formattedTotal)}`);
     } catch (err) {
       setBusy(false);
@@ -95,6 +109,30 @@ export default function LogSession() {
         </Link>
       </div>
 
+      {/* Prescribed Session Context Banner */}
+      {prescriptionId && (
+        <div
+          className="card"
+          style={{
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(23, 38, 59, 1) 100%)',
+            borderColor: 'var(--gold-hyrox)',
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span className="transfer-badge transfer-moderate">Prescribed Session Fulfillment</span>
+            {targetTimeParam && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--gold-hyrox)', fontWeight: 700 }}>
+                Target: {formatSeconds(Number(targetTimeParam))}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+            Saving this workout will automatically fulfill your coach&apos;s prescription and update your compliance metrics.
+          </div>
+        </div>
+      )}
+
       {/* Comprehensive Validation Error Banner */}
       {validationErrors.length > 0 && (
         <div className="attention-card" style={{ marginBottom: 16 }}>
@@ -112,81 +150,86 @@ export default function LogSession() {
         </div>
       )}
 
-      {error && !validationErrors.length && <p className="error">{error}</p>}
+      {error && <p className="error">{error}</p>}
 
       <form onSubmit={handleSubmit}>
-        {/* Session Meta */}
+        {/* Top Session Configuration */}
         <div className="card">
-          <h2 className="card-title">Session Configuration</h2>
           <div className="form-grid">
-            <label>
-              Workout Date
+            <div>
+              <label>Workout Date</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-            </label>
-            <label>
-              Simulation Category
+            </div>
+
+            <div>
+              <label>Simulation Category</label>
               <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                <option value="full_simulation">Full Race Simulation (16 Legs)</option>
+                <option value="full_simulation">Full 16-Leg Simulation</option>
                 <option value="half_sim">Half Simulation (8 Legs)</option>
-                <option value="benchmark">Benchmark Assessment</option>
-                <option value="training">General Training</option>
+                <option value="benchmark">Benchmark Race Trial</option>
+                <option value="training">Daily Training Session</option>
               </select>
-            </label>
-            <label>
-              Perceived Exertion (RPE 1-10)
+            </div>
+
+            <div>
+              <label>Rate of Perceived Exertion (RPE 6–10)</label>
               <select value={rpe} onChange={(e) => setRpe(e.target.value)}>
-                <option value="6">6 — Moderate Aerobic</option>
-                <option value="7">7 — Hard / Controlled</option>
-                <option value="8">8 — Heavy / Threshold</option>
-                <option value="9">9 — Very Hard / Race Pace</option>
-                <option value="10">10 — All-out Maximal Effort</option>
+                <option value="6">6 · Moderate (Aerobic Pace)</option>
+                <option value="7">7 · Vigorous (Comfortably Hard)</option>
+                <option value="8">8 · Hard (Race Target Effort)</option>
+                <option value="9">9 · Very Hard (Peak Lactate)</option>
+                <option value="10">10 · Maximal (Exhaustion / PB Attempt)</option>
               </select>
-            </label>
+            </div>
           </div>
         </div>
 
-        {/* Live Elapsed Split Indicator & Progress */}
-        <div className="card" style={{ background: 'linear-gradient(135deg, var(--surface-card), var(--surface-elevated))', borderColor: 'var(--teal-primary)' }}>
+        {/* Live Calculation Banner */}
+        <div className="card" style={{ background: 'var(--surface-elevated)', border: '1px solid var(--border-active)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <span className="kpi-label">Calculated Elapsed Time</span>
-              <div style={{ fontSize: '1.9rem', fontWeight: 900, color: 'var(--teal-primary)', fontFeatureSettings: '"tnum"' }}>
-                {formatSeconds(liveTotalSec)}
-              </div>
-              <div style={{ fontSize: '0.82rem', color: enteredCount === 16 ? 'var(--success-emerald)' : 'var(--gold-hyrox)', fontWeight: 600, marginTop: 2 }}>
-                {enteredCount} of 16 legs entered
+              <span className="kpi-label">Progress: {enteredCount} of 16 entered</span>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>
+                Elapsed: <span style={{ color: 'var(--teal-primary)' }}>{formatSeconds(liveTotalSec)}</span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 24, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', gap: 16 }}>
               <div>
-                <span style={{ display: 'block', color: 'var(--text-subtle)' }}>Total Runs (8km):</span>
-                <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{formatSeconds(liveRunSec)}</strong>
+                <span className="kpi-label">8km Run Total</span>
+                <div style={{ fontSize: '1rem', fontWeight: 700, fontFeatureSettings: '"tnum"' }}>
+                  {formatSeconds(liveRunSec)}
+                </div>
               </div>
               <div>
-                <span style={{ display: 'block', color: 'var(--text-subtle)' }}>Total Stations:</span>
-                <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{formatSeconds(liveStationSec)}</strong>
+                <span className="kpi-label">Stations Total</span>
+                <div style={{ fontSize: '1rem', fontWeight: 700, fontFeatureSettings: '"tnum"' }}>
+                  {formatSeconds(liveStationSec)}
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 16-Leg Rapid Entry Grid with Auto-Colon */}
+        {/* 16-Leg Split Inputs */}
         <div className="card">
-          <h2 className="card-title">16-Leg Split Entry (8 Runs + 8 Stations)</h2>
-          <p className="muted" style={{ margin: '0 0 16px', fontSize: '0.82rem' }}>
-            Auto-formats as you type digits on mobile (e.g. typing <code style={{ color: 'var(--teal-primary)' }}>430</code> becomes <code style={{ color: 'var(--teal-primary)' }}>4:30</code>).
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h2 className="card-title" style={{ margin: 0 }}>Official 16-Leg Splits</h2>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Type digits (e.g. <strong>430</strong> becomes <strong>4:30</strong>)
+            </span>
+          </div>
 
-          <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
             {LEGS.map((leg) => {
-              const val = times[leg.leg];
-              const isFilled = val && !Number.isNaN(parseTime(val));
+              const isFilled = times[leg.leg] && !Number.isNaN(parseTime(times[leg.leg]));
               return (
                 <label
                   key={leg.leg}
                   style={{
-                    background: leg.isRun ? 'var(--bg-navy)' : 'var(--surface-elevated)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    background: 'var(--bg-navy)',
                     padding: '10px 12px',
                     borderRadius: 8,
                     border: isFilled ? '1px solid var(--teal-primary)' : '1px solid var(--border-subtle)',
@@ -221,5 +264,13 @@ export default function LogSession() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function LogSession() {
+  return (
+    <Suspense fallback={<div className="container"><p className="muted">Loading Workout Logger…</p></div>}>
+      <LogSessionContent />
+    </Suspense>
   );
 }

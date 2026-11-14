@@ -7,7 +7,13 @@ import Header from '../../components/Header';
 import { formatSeconds, LEGS } from '../../lib/format';
 import { useProfile } from '../../lib/useProfile';
 import { computeRunSplits } from '../../lib/performance';
-import { getAthleteDashboardData, respondToCoachRequest, deleteWorkoutSession, inviteCoachByEmail } from '../../lib/data';
+import {
+  getAthleteDashboardData,
+  respondToCoachRequest,
+  deleteWorkoutSession,
+  inviteCoachByEmail,
+  getAthletePrescriptions,
+} from '../../lib/data';
 
 function AthleteDashboardContent() {
   const searchParams = useSearchParams();
@@ -23,6 +29,7 @@ function AthleteDashboardContent() {
     formattedPersonalBest: '—',
     totalCompleted: 0,
   });
+  const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showSavedBanner, setShowSavedBanner] = useState(Boolean(savedSuccess));
@@ -41,8 +48,12 @@ function AthleteDashboardContent() {
   async function loadDashboard() {
     try {
       setLoading(true);
-      const res = await getAthleteDashboardData(profile.id);
+      const [res, prescList] = await Promise.all([
+        getAthleteDashboardData(profile.id),
+        getAthletePrescriptions(profile.id),
+      ]);
       setData(res);
+      setPrescriptions(prescList || []);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load athlete dashboard');
@@ -100,9 +111,64 @@ function AthleteDashboardContent() {
   }
   if (!profile) return <div className="container"><p className="error">Could not load athlete profile.</p></div>;
 
+  const activePrescription = prescriptions.find((p) => p.status !== 'completed' && p.status !== 'cancelled') || null;
+
   return (
     <div className="container">
       <Header title={`Athlete: ${profile.full_name || 'Competitor'}`} role="athlete" />
+
+      {/* High-Priority Prescribed Workout Banner ("Today's Workout") */}
+      {activePrescription && (
+        <div
+          className="card"
+          style={{
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(23, 38, 59, 1) 100%)',
+            borderColor: 'var(--gold-hyrox)',
+            marginBottom: 20,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span className="transfer-badge transfer-moderate">Prescribed by Coach</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--gold-hyrox)', fontWeight: 700 }}>
+                  Due: {activePrescription.scheduled_date}
+                </span>
+              </div>
+              <h2 style={{ margin: '2px 0 6px', fontSize: '1.35rem', fontWeight: 800 }}>
+                {activePrescription.workout?.title || 'HYROX Prescribed Session'}
+              </h2>
+              {activePrescription.coaching_notes && (
+                <p style={{ margin: '4px 0 0', fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                  💬 Coach instructions: <em>&ldquo;{activePrescription.coaching_notes}&rdquo;</em>
+                </p>
+              )}
+              {activePrescription.target_total_time_sec && (
+                <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                  Target Completion Time: <strong>{formatSeconds(activePrescription.target_total_time_sec)}</strong>
+                </div>
+              )}
+            </div>
+
+            <div style={{ alignSelf: 'center' }}>
+              <Link
+                href={`/athlete/log?prescriptionId=${activePrescription.id}&target=${activePrescription.target_total_time_sec || ''}`}
+                className="button"
+                style={{
+                  background: 'var(--gold-hyrox)',
+                  color: '#000',
+                  fontWeight: 800,
+                  fontSize: '0.95rem',
+                  padding: '12px 24px',
+                  display: 'inline-block',
+                }}
+              >
+                ⚡ START & LOG THIS SESSION
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Success Banner After Saving a Workout */}
       {showSavedBanner && (
@@ -274,6 +340,72 @@ function AthleteDashboardContent() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Prescribed Training Schedule (From Coach) */}
+      {prescriptions.length > 0 && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h2 className="card-title" style={{ margin: 0 }}>
+              Coach Prescriptions & Training Schedule ({prescriptions.length})
+            </h2>
+            <span className="badge badge-active">Active Plan</span>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Prescribed Workout</th>
+                  <th>Target Time</th>
+                  <th>Coach Instructions</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prescriptions.map((p) => {
+                  const isDone = p.status === 'completed';
+                  return (
+                    <tr key={p.id}>
+                      <td style={{ fontWeight: 600 }}>{p.scheduled_date}</td>
+                      <td>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {p.workout?.title || 'Prescribed Session'}
+                        </span>
+                      </td>
+                      <td style={{ fontFeatureSettings: '"tnum"', fontWeight: 600, color: 'var(--gold-hyrox)' }}>
+                        {p.target_total_time_sec ? formatSeconds(p.target_total_time_sec) : 'Open Target'}
+                      </td>
+                      <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 220 }}>
+                        {p.coaching_notes || '—'}
+                      </td>
+                      <td>
+                        <span className={`badge ${isDone ? 'badge-active' : 'badge-pending'}`}>
+                          {isDone ? '✓ Completed' : p.status}
+                        </span>
+                      </td>
+                      <td>
+                        {!isDone ? (
+                          <Link
+                            href={`/athlete/log?prescriptionId=${p.id}&target=${p.target_total_time_sec || ''}`}
+                            className="button"
+                            style={{ padding: '4px 10px', fontSize: '0.78rem', background: 'var(--gold-hyrox)', color: '#000' }}
+                          >
+                            Log
+                          </Link>
+                        ) : (
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Logged</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
