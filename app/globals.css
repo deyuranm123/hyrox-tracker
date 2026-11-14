@@ -460,3 +460,147 @@ details table {
     font-size: 0.82rem;
   }
 }
+
+/* ==========================================================================
+   Stage 2: Adaptive Equipment & Workout Generator Styles
+   ========================================================================== */
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.nav-link:hover, .nav-link.active {
+  color: var(--teal-primary);
+}
+
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 16px;
+}
+
+.chip {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.84rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.chip:hover {
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.chip.selected {
+  background: var(--teal-glow);
+  border-color: var(--teal-primary);
+  color: var(--teal-primary);
+  font-weight: 600;
+}
+
+.chip.chip-gold.selected {
+  background: var(--gold-glow);
+  border-color: var(--gold-hyrox);
+  color: var(--gold-hyrox);
+}
+
+.equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.equipment-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.equipment-card.active {
+  border-color: var(--teal-primary);
+  background: rgba(25, 182, 160, 0.05);
+}
+
+.transfer-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.transfer-direct {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.transfer-high {
+  background: var(--teal-glow);
+  color: var(--teal-primary);
+  border: 1px solid rgba(25, 182, 160, 0.3);
+}
+
+.transfer-moderate {
+  background: var(--gold-glow);
+  color: var(--gold-hyrox);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.transfer-general {
+  background: rgba(142, 156, 174, 0.12);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.workout-block {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.workout-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.exercise-timeline-step {
+  border-left: 2px solid var(--teal-primary);
+  padding-left: 14px;
+  margin-left: 4px;
+  margin-bottom: 14px;
+}
+

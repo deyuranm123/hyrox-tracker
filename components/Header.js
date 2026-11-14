@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabase';
 
 export default function Header({ title, role }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -13,7 +14,7 @@ export default function Header({ title, role }) {
   }
 
   return (
-    <header className="header">
+    <header className="header" style={{ flexWrap: 'wrap', gap: '14px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <Link href="/" className="brand">
           <span className="brand-badge">RŌX</span>
@@ -27,10 +28,35 @@ export default function Header({ title, role }) {
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <h1 style={{ display: 'none' }}>{title}</h1>
-        {title && <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 500 }}>{title}</span>}
-        <button onClick={signOut} className="secondary" style={{ padding: '7px 14px', fontSize: '0.82rem' }}>
+      {/* Navigation Links */}
+      {role === 'athlete' && (
+        <nav className="nav-links" style={{ overflowX: 'auto', padding: '4px 0' }}>
+          <Link href="/athlete" className={`nav-link ${pathname === '/athlete' ? 'active' : ''}`}>
+            Dashboard
+          </Link>
+          <Link href="/athlete/workouts/generate" className={`nav-link ${pathname?.includes('/workouts') ? 'active' : ''}`}>
+            ⚡ Build Workout
+          </Link>
+          <Link href="/athlete/equipment" className={`nav-link ${pathname === '/athlete/equipment' ? 'active' : ''}`}>
+            🎒 Equipment
+          </Link>
+          <Link href="/athlete/log" className={`nav-link ${pathname === '/athlete/log' ? 'active' : ''}`}>
+            + Log Splits
+          </Link>
+        </nav>
+      )}
+
+      {role === 'coach' && (
+        <nav className="nav-links">
+          <Link href="/coach" className={`nav-link ${pathname === '/coach' ? 'active' : ''}`}>
+            Command Centre
+          </Link>
+        </nav>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
+        {title && <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, display: 'none' }}>{title}</span>}
+        <button onClick={signOut} className="secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
           Sign out
         </button>
       </div>

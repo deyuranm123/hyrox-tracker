@@ -7,7 +7,7 @@ import Header from '../../components/Header';
 import { formatSeconds, LEGS } from '../../lib/format';
 import { useProfile } from '../../lib/useProfile';
 import { computeRunSplits } from '../../lib/performance';
-import { getAthleteDashboardData, respondToCoachRequest, deleteWorkoutSession } from '../../lib/data';
+import { getAthleteDashboardData, respondToCoachRequest, deleteWorkoutSession, inviteCoachByEmail } from '../../lib/data';
 
 function AthleteDashboardContent() {
   const searchParams = useSearchParams();
@@ -26,6 +26,11 @@ function AthleteDashboardContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showSavedBanner, setShowSavedBanner] = useState(Boolean(savedSuccess));
+
+  // Viral Coach Invite State
+  const [coachEmailInput, setCoachEmailInput] = useState('');
+  const [inviteStatus, setInviteStatus] = useState(null);
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -62,6 +67,31 @@ function AthleteDashboardContent() {
       loadDashboard();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete workout session.');
+    }
+  }
+
+  async function handleInviteCoach(e) {
+    e.preventDefault();
+    if (!coachEmailInput.trim()) return;
+    setInviting(true);
+    setInviteStatus(null);
+
+    try {
+      const res = await inviteCoachByEmail(coachEmailInput.trim());
+      if (res === 'connected') {
+        setInviteStatus({ type: 'success', msg: `Connected with Coach ${coachEmailInput}! They can now view your training.` });
+        loadDashboard();
+      } else {
+        setInviteStatus({
+          type: 'info',
+          msg: `Invite recorded for ${coachEmailInput}. As soon as they sign up as a coach, your account will be linked.`,
+        });
+      }
+      setCoachEmailInput('');
+    } catch (err) {
+      setInviteStatus({ type: 'error', msg: err.message || 'Failed to send invite.' });
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -162,6 +192,39 @@ function AthleteDashboardContent() {
             Private
           </span>
           <span className="kpi-sub">Only accepted coaches can view splits</span>
+        </div>
+      </div>
+
+      {/* Stage 2 Adaptive Action Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginBottom: 18 }}>
+        {/* AI Workout Generator */}
+        <div className="card" style={{ background: 'linear-gradient(135deg, #17263b 0%, #1c3350 100%)', border: '1px solid var(--teal-primary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: '1.3rem' }}>⚡</span>
+            <span className="transfer-badge transfer-high">Adaptive OS</span>
+          </div>
+          <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem' }}>Build My HYROX Workout</h3>
+          <p className="muted" style={{ fontSize: '0.84rem', marginBottom: 16 }}>
+            Generate balanced compromised running & station workouts tailored strictly to your gear.
+          </p>
+          <Link href="/athlete/workouts/generate" className="button" style={{ display: 'inline-block', width: '100%', textAlign: 'center', background: 'var(--teal-primary)', color: '#000', fontWeight: 800 }}>
+            Generate Workout →
+          </Link>
+        </div>
+
+        {/* Equipment Inventory */}
+        <div className="card" style={{ background: 'linear-gradient(135deg, #17263b 0%, #1a2f4c 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: '1.3rem' }}>🎒</span>
+            <span className="transfer-badge transfer-direct">Inventory & Scan</span>
+          </div>
+          <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem' }}>My Equipment & Coverage</h3>
+          <p className="muted" style={{ fontSize: '0.84rem', marginBottom: 16 }}>
+            Audit your available gear and review biomechanical transfer against official stations.
+          </p>
+          <Link href="/athlete/equipment" className="secondary" style={{ display: 'inline-block', width: '100%', textAlign: 'center', fontWeight: 700 }}>
+            Manage Equipment →
+          </Link>
         </div>
       </div>
 
@@ -284,6 +347,36 @@ function AthleteDashboardContent() {
             );
           })
         )}
+      </div>
+      {/* Invite Your Coach (Viral Growth Loop) */}
+      <div className="card" style={{ border: '1px dashed var(--border-active)' }}>
+        <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem' }}>Invite Your Coach to RŌXCOACH</h3>
+        <p className="muted" style={{ fontSize: '0.85rem', marginBottom: 14 }}>
+          Coached by a certified trainer or gym? Connect your account so they can prescribe workouts, review your splits, and give debrief feedback.
+        </p>
+
+        {inviteStatus && (
+          <div
+            className={`alert ${inviteStatus.type === 'success' ? 'alert-success' : 'alert-info'}`}
+            style={{ marginBottom: 12 }}
+          >
+            {inviteStatus.msg}
+          </div>
+        )}
+
+        <form onSubmit={handleInviteCoach} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <input
+            type="email"
+            value={coachEmailInput}
+            onChange={(e) => setCoachEmailInput(e.target.value)}
+            placeholder="coach@example.com"
+            required
+            style={{ flex: 1, minWidth: 240, padding: '10px 14px' }}
+          />
+          <button type="submit" disabled={inviting} className="primary" style={{ padding: '10px 18px' }}>
+            {inviting ? 'Sending Invite...' : 'Send Coach Invite'}
+          </button>
+        </form>
       </div>
     </div>
   );
