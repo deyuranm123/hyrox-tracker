@@ -45,7 +45,9 @@ create table if not exists sessions (
   id uuid primary key default gen_random_uuid(),
   athlete_id uuid not null references profiles(id) on delete cascade,
   session_date date not null default current_date,
-  type text not null default 'training' check (type in ('race', 'training')),
+  category text not null default 'training' check (category in ('training', 'full_simulation', 'half_sim', 'benchmark')),
+  rpe integer check (rpe between 1 and 10),
+  type text default 'training',
   total_time_sec integer,
   created_at timestamptz not null default now()
 );

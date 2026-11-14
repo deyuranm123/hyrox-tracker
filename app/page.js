@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [role, setRole] = useState('coach'); // default to Coach since it's B2B
+  const [role, setRole] = useState('athlete'); // default athlete for high adoption
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,7 +44,7 @@ export default function LoginPage() {
       if (signUpErr) return setError(signUpErr.message);
 
       if (!data.session) {
-        return setInfo('Check your email to confirm your account, then sign in.');
+        return setInfo("Click the link in your email. You'll land back here signed in.");
       }
       await routeByRole(data.user.id);
       return;
@@ -63,8 +63,11 @@ export default function LoginPage() {
           <span className="brand-badge" style={{ fontSize: '1.05rem', padding: '3px 9px' }}>RŌX</span>
           <span style={{ fontSize: '1.4rem', fontWeight: 900, letterSpacing: '0.08em' }}>COACH</span>
         </div>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '8px 0 4px', color: 'var(--text-primary)' }}>
+          Log every split. Know where you lose time.
+        </h1>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          The HYROX Coaching Operating System
+          The HYROX Coaching & Pacing Operating System
         </p>
       </div>
 
@@ -94,26 +97,41 @@ export default function LoginPage() {
               Full Name
               <input
                 type="text"
-                placeholder="e.g. Lauren Weeks or Coach Dan"
+                placeholder="e.g. Lauren Weeks or Hunter McIntyre"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
             </label>
-            <label>
-              Account Type
-              <select value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="coach">HYROX Coach (Command Centre)</option>
-                <option value="athlete">HYROX Athlete (Training Log)</option>
-              </select>
-            </label>
+            <div>
+              <span className="kpi-label" style={{ display: 'block', marginBottom: 6 }}>I am a</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setRole('athlete')}
+                  className={role === 'athlete' ? '' : 'secondary'}
+                  style={{ padding: '10px 8px', fontSize: '0.85rem', width: '100%' }}
+                >
+                  I&apos;m an Athlete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole('coach')}
+                  className={role === 'coach' ? '' : 'secondary'}
+                  style={{ padding: '10px 8px', fontSize: '0.85rem', width: '100%' }}
+                >
+                  I&apos;m a Coach
+                </button>
+              </div>
+            </div>
           </>
         )}
+
         <label>
           Email Address
           <input
             type="email"
-            placeholder="coach@hyroxclub.com"
+            placeholder="athlete@gym.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -131,12 +149,18 @@ export default function LoginPage() {
           />
         </label>
         <button type="submit" disabled={busy} style={{ width: '100%', marginTop: '6px' }}>
-          {busy ? 'Processing…' : mode === 'login' ? 'Access Command Centre' : 'Start Free Coaching Workspace'}
+          {busy ? 'Processing…' : mode === 'login' ? 'Access Workspace' : 'Create Free Account'}
         </button>
       </form>
 
       {error && <p className="error">{error}</p>}
-      {info && <p className="muted" style={{ textAlign: 'center', marginTop: '14px' }}>{info}</p>}
+      {info && <p className="muted" style={{ textAlign: 'center', marginTop: '14px', color: 'var(--teal-primary)' }}>{info}</p>}
+
+      <div style={{ marginTop: 20, textAlign: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+        <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-subtle)' }}>
+          🔒 Your sessions are private. Only coaches you accept can see them.
+        </p>
+      </div>
     </div>
   );
 }

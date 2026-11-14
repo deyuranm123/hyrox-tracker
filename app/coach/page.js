@@ -3,143 +3,76 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Header from '../../components/Header';
-import { supabase } from '../../lib/supabase';
 import { formatSeconds } from '../../lib/format';
 import { useProfile } from '../../lib/useProfile';
+import { getCoachDashboardData, requestAthleteByEmail, removeAthleteLink } from '../../lib/data';
 
 export default function CoachDashboard() {
-  const { profile, loading } = useProfile('coach');
-  const [roster, setRoster] = useState([]);
+  const { profile, loading: profileLoading } = useProfile('coach');
+  const [data, setData] = useState({
+    roster: [],
+    activeAthletes: [],
+    pendingAthletes: [],
+    attentionItems: [],
+  });
+  const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!profile) return;
-    load();
+    loadDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
-  async function load() {
-    const { data: links, error: linkErr } = await supabase
-      .from('coach_athletes')
-      .select('athlete_id, status, profiles!coach_athletes_athlete_id_fkey(full_name, email)')
-      .eq('coach_id', profile.id);
-    if (linkErr) return setError(linkErr.message);
-
-    const accepted = (links || []).filter((l) => l.status === 'accepted').map((l) => l.athlete_id);
-    let sessionsByAthlete = {};
-
-    if (accepted.length > 0) {
-      const { data: sessions } = await supabase
-        .from('sessions')
-        .select('athlete_id, session_date, total_time_sec, type')
-        .in('athlete_id', accepted)
-        .order('session_date', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      for (const s of sessions || []) {
-        if (!sessionsByAthlete[s.athlete_id]) {
-          sessionsByAthlete[s.athlete_id] = [];
-        }
-        sessionsByAthlete[s.athlete_id].push(s);
-      }
+  async function loadDashboard() {
+    try {
+      setLoading(true);
+      const res = await getCoachDashboardData(profile.id);
+      setData(res);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load coach command centre.');
+    } finally {
+      setLoading(false);
     }
-
-    const compiledRoster = (links || []).map((l) => {
-      const athleteSessions = sessionsByAthlete[l.athlete_id] || [];
-      const lastSession = athleteSessions[0] || null;
-      const prevSession = athleteSessions[1] || null;
-
-      let deltaSec = null;
-      let deltaFormatted = '—';
-      if (lastSession?.total_time_sec && prevSession?.total_time_sec) {
-        deltaSec = lastSession.total_time_sec - prevSession.total_time_sec;
-        const sign = deltaSec > 0 ? '+' : deltaSec < 0 ? '−' : '';
-        deltaFormatted = `${sign}${formatSeconds(Math.abs(deltaSec))}`;
-      }
-
-      // Inactivity check (> 7 days since last session)
-      let daysSinceLast = null;
-      if (lastSession?.session_date) {
-        const diffMs = Date.now() - new Date(lastSession.session_date).getTime();
-        daysSinceLast = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      }
-
-      return {
-        ...l,
-        last: lastSession,
-        prev: prevSession,
-        deltaSec,
-        deltaFormatted,
-        daysSinceLast,
-        totalSessionsCount: athleteSessions.length,
-      };
-    });
-
-    setRoster(compiledRoster);
   }
 
-  async function addAthlete(e) {
+  async function handleAddAthlete(e) {
     e.preventDefault();
     setMessage('');
     setError('');
-    const { data, error: reqErr } = await supabase.rpc('request_athlete', { p_email: email });
-    if (reqErr) return setError(reqErr.message);
 
-    const messages = {
-      requested: 'Invitation dispatched. Athlete must accept from their portal to reveal simulation splits.',
-      not_found: 'No athlete account found with that email. Have them register as an Athlete first.',
-      not_allowed: 'Only verified coaches can issue roster invitations.',
-    };
-    setMessage(messages[data] || 'Invitation processed.');
-    if (data === 'requested') setEmail('');
-    load();
-  }
-
-  async function removeLink(athleteId) {
-    if (!confirm('Remove this athlete from your active roster?')) return;
-    await supabase
-      .from('coach_athletes')
-      .delete()
-      .eq('coach_id', profile.id)
-      .eq('athlete_id', athleteId);
-    load();
-  }
-
-  if (loading) return <div className="container"><p className="muted">Loading Command Centre…</p></div>;
-  if (!profile) return <div className="container"><p className="error">Could not load coach profile.</p></div>;
-
-  const activeAthletes = roster.filter((r) => r.status === 'accepted');
-  const pendingAthletes = roster.filter((r) => r.status === 'pending');
-
-  // Attention Required Engine:
-  // 1. Pending athlete approvals
-  // 2. Inactive athletes (> 7 days without training)
-  // 3. Athletes who improved in their latest session
-  const attentionItems = [];
-  pendingAthletes.forEach((p) => {
-    attentionItems.push({
-      type: 'pending',
-      title: `${p.profiles?.full_name || p.profiles?.email} invitation pending`,
-      desc: 'Awaiting athlete confirmation.',
-    });
-  });
-  activeAthletes.forEach((a) => {
-    if (a.daysSinceLast != null && a.daysSinceLast >= 7) {
-      attentionItems.push({
-        type: 'inactive',
-        title: `${a.profiles?.full_name || 'Athlete'} missed training`,
-        desc: `${a.daysSinceLast} days since last logged session. Review weekly volume.`,
-      });
-    } else if (a.deltaSec != null && a.deltaSec < 0) {
-      attentionItems.push({
-        type: 'progress',
-        title: `${a.profiles?.full_name || 'Athlete'} improved pace`,
-        desc: `Cut ${formatSeconds(Math.abs(a.deltaSec))} off their last simulation.`,
-      });
+    try {
+      const status = await requestAthleteByEmail(email);
+      const messages = {
+        requested: 'Invitation dispatched. Athlete must accept from their portal to reveal simulation splits.',
+        not_found: 'No athlete account found with that email. Have them register as an Athlete first.',
+        not_allowed: 'Only verified coaches can issue roster invitations.',
+      };
+      setMessage(messages[status] || 'Invitation processed.');
+      if (status === 'requested') setEmail('');
+      loadDashboard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to issue roster invite.');
     }
-  });
+  }
+
+  async function handleRemoveLink(athleteId) {
+    if (!confirm('Remove this athlete from your active roster?')) return;
+    try {
+      await removeAthleteLink({ coachId: profile.id, athleteId });
+      loadDashboard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove athlete.');
+    }
+  }
+
+  if (profileLoading || (loading && !data.roster.length)) {
+    return <div className="container"><p className="muted">Loading Command Centre…</p></div>;
+  }
+  if (!profile) return <div className="container"><p className="error">Could not load coach profile.</p></div>;
 
   return (
     <div className="container">
@@ -149,22 +82,22 @@ export default function CoachDashboard() {
       <div className="kpi-grid">
         <div className="kpi-card">
           <span className="kpi-label">Active Athletes</span>
-          <span className="kpi-value">{activeAthletes.length}</span>
-          <span className="kpi-sub">{pendingAthletes.length} pending onboarding</span>
+          <span className="kpi-value">{data.activeAthletes.length}</span>
+          <span className="kpi-sub">{data.pendingAthletes.length} pending onboarding</span>
         </div>
 
         <div className="kpi-card">
           <span className="kpi-label">Attention Signals</span>
-          <span className="kpi-value" style={{ color: attentionItems.length > 0 ? 'var(--gold-hyrox)' : 'var(--success-emerald)' }}>
-            {attentionItems.length}
+          <span className="kpi-value" style={{ color: data.attentionItems.length > 0 ? 'var(--gold-hyrox)' : 'var(--success-emerald)' }}>
+            {data.attentionItems.length}
           </span>
           <span className="kpi-sub">Critical athlete updates</span>
         </div>
 
         <div className="kpi-card">
-          <span className="kpi-label">Weekly Training Pace</span>
+          <span className="kpi-label">Weekly Training Volume</span>
           <span className="kpi-value" style={{ color: 'var(--teal-primary)' }}>
-            {activeAthletes.filter((a) => a.last != null).length} / {activeAthletes.length || 1}
+            {data.activeAthletes.filter((a) => a.last != null).length} / {data.activeAthletes.length || 1}
           </span>
           <span className="kpi-sub">Athletes logged sessions</span>
         </div>
@@ -177,16 +110,16 @@ export default function CoachDashboard() {
       </div>
 
       {/* Attention Required Command Panel */}
-      {attentionItems.length > 0 && (
+      {data.attentionItems.length > 0 && (
         <div className="attention-card">
           <div className="attention-header">
             <span className="card-title" style={{ margin: 0, color: '#fca5a5' }}>
               Attention Required
             </span>
-            <span className="attention-badge">{attentionItems.length} Action Items</span>
+            <span className="attention-badge">{data.attentionItems.length} Action Items</span>
           </div>
           <div>
-            {attentionItems.map((item, idx) => (
+            {data.attentionItems.map((item, idx) => (
               <div key={idx} className="attention-item">
                 <div>
                   <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.title}</div>
@@ -202,7 +135,7 @@ export default function CoachDashboard() {
       {/* Add Athlete Quick Bar */}
       <div className="card">
         <h2 className="card-title">Add Athlete to Roster</h2>
-        <form onSubmit={addAthlete} className="row">
+        <form onSubmit={handleAddAthlete} className="row">
           <input
             type="email"
             placeholder="athlete@gym.com"
@@ -220,7 +153,7 @@ export default function CoachDashboard() {
       {/* Athlete Portfolio Roster */}
       <div className="card">
         <h2 className="card-title">Athlete Roster & Performance Deltas</h2>
-        {roster.length === 0 ? (
+        {data.roster.length === 0 ? (
           <p className="muted">No athletes assigned yet. Issue an invitation above to begin tracking.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -236,7 +169,7 @@ export default function CoachDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {roster.map((row) => {
+                {data.roster.map((row) => {
                   const last = row.last;
                   const isAccepted = row.status === 'accepted';
                   const isFaster = row.deltaSec != null && row.deltaSec < 0;
@@ -284,7 +217,7 @@ export default function CoachDashboard() {
                           )}
                           <button
                             className="secondary danger"
-                            onClick={() => removeLink(row.athlete_id)}
+                            onClick={() => handleRemoveLink(row.athlete_id)}
                             style={{ padding: '6px 10px', fontSize: '0.8rem' }}
                             title="Remove from roster"
                           >

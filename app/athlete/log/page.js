@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Header from '../../../components/Header';
-import { supabase } from '../../../lib/supabase';
-import { LEGS, parseTime, formatSeconds } from '../../../lib/format';
+import { LEGS, parseTime, formatSeconds, formatAsTimeInput, validateAllLegs } from '../../../lib/format';
 import { useProfile } from '../../../lib/useProfile';
+import { saveWorkoutSession } from '../../../lib/data';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -14,13 +14,30 @@ export default function LogSession() {
   const router = useRouter();
   const { profile, loading } = useProfile('athlete');
   const [date, setDate] = useState(today());
-  const [type, setType] = useState('training');
+  const [category, setCategory] = useState('full_simulation');
   const [rpe, setRpe] = useState('8');
   const [times, setTimes] = useState(() => Object.fromEntries(LEGS.map((l) => [l.leg, ''])));
+  const [validationErrors, setValidationErrors] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Live total time calculation as the athlete types
+  // Auto-formats input as user types digits on mobile
+  const handleSplitChange = (legNumber, rawVal) => {
+    const formatted = formatAsTimeInput(rawVal);
+    setTimes((prev) => ({ ...prev, [legNumber]: formatted }));
+    if (validationErrors.length > 0) {
+      setValidationErrors([]);
+      setError('');
+    }
+  };
+
+  // Live progress count: "X of 16 entered"
+  const enteredCount = LEGS.filter((l) => {
+    const p = parseTime(times[l.leg]);
+    return p !== null && !Number.isNaN(p);
+  }).length;
+
+  // Live total time calculations
   let liveTotalSec = 0;
   let liveRunSec = 0;
   let liveStationSec = 0;
@@ -34,52 +51,35 @@ export default function LogSession() {
     }
   }
 
-  async function save(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setValidationErrors([]);
 
-    const parsed = {};
-    for (const leg of LEGS) {
-      const value = parseTime(times[leg.leg]);
-      if (value === null) {
-        return setError(`Please enter a time split for Leg ${leg.leg}: ${leg.label}.`);
-      }
-      if (Number.isNaN(value)) {
-        return setError(`Time for ${leg.label} must be formatted like 4:30 (mm:ss).`);
-      }
-      parsed[leg.leg] = value;
+    // Validate all 16 splits simultaneously
+    const validation = validateAllLegs(times);
+    if (!validation.isValid) {
+      const allErrors = Object.values(validation.errors);
+      setValidationErrors(allErrors);
+      setError(`Please complete all 16 legs (${validation.missingLegs.length} remaining).`);
+      return;
     }
-
-    const total = Object.values(parsed).reduce((a, b) => a + b, 0);
 
     setBusy(true);
-    const { data: session, error: sErr } = await supabase
-      .from('sessions')
-      .insert({
-        athlete_id: profile.id,
-        session_date: date,
-        type: `${type} (RPE: ${rpe})`,
-        total_time_sec: total,
-      })
-      .select('id')
-      .single();
+    try {
+      const result = await saveWorkoutSession({
+        athleteId: profile.id,
+        sessionDate: date,
+        category,
+        rpe: Number(rpe),
+        splits: times,
+      });
 
-    if (sErr) {
+      router.push(`/athlete?saved=true&total=${encodeURIComponent(result.formattedTotal)}`);
+    } catch (err) {
       setBusy(false);
-      return setError(sErr.message);
+      setError(err instanceof Error ? err.message : 'Failed to record workout session.');
     }
-
-    const rows = LEGS.map((leg) => ({
-      session_id: session.id,
-      leg: leg.leg,
-      time_sec: parsed[leg.leg],
-    }));
-
-    const { error: rErr } = await supabase.from('station_results').insert(rows);
-    setBusy(false);
-
-    if (rErr) return setError(rErr.message);
-    router.push('/athlete');
   }
 
   if (loading) return <div className="container"><p className="muted">Loading Workout Logger…</p></div>;
@@ -95,7 +95,26 @@ export default function LogSession() {
         </Link>
       </div>
 
-      <form onSubmit={save}>
+      {/* Comprehensive Validation Error Banner */}
+      {validationErrors.length > 0 && (
+        <div className="attention-card" style={{ marginBottom: 16 }}>
+          <div className="attention-header">
+            <span className="card-title" style={{ margin: 0, color: 'var(--danger-coral)' }}>
+              Incomplete Workout Form ({validationErrors.length} issues)
+            </span>
+            <span className="badge" style={{ background: 'var(--danger-coral)', color: '#fff' }}>Action Required</span>
+          </div>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 20, fontSize: '0.82rem', color: '#fca5a5' }}>
+            {validationErrors.map((msg, idx) => (
+              <li key={idx} style={{ marginBottom: 4 }}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {error && !validationErrors.length && <p className="error">{error}</p>}
+
+      <form onSubmit={handleSubmit}>
         {/* Session Meta */}
         <div className="card">
           <h2 className="card-title">Session Configuration</h2>
@@ -105,11 +124,12 @@ export default function LogSession() {
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
             </label>
             <label>
-              Simulation Type
-              <select value={type} onChange={(e) => setType(e.target.value)}>
-                <option value="training">Training Simulation</option>
-                <option value="race">Official Race Benchmark</option>
-                <option value="taper">Taper Rehearsal</option>
+              Simulation Category
+              <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="full_simulation">Full Race Simulation (16 Legs)</option>
+                <option value="half_sim">Half Simulation (8 Legs)</option>
+                <option value="benchmark">Benchmark Assessment</option>
+                <option value="training">General Training</option>
               </select>
             </label>
             <label>
@@ -125,13 +145,16 @@ export default function LogSession() {
           </div>
         </div>
 
-        {/* Live Elapsed Split Indicator */}
+        {/* Live Elapsed Split Indicator & Progress */}
         <div className="card" style={{ background: 'linear-gradient(135deg, var(--surface-card), var(--surface-elevated))', borderColor: 'var(--teal-primary)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <span className="kpi-label">Calculated Elapsed Time</span>
               <div style={{ fontSize: '1.9rem', fontWeight: 900, color: 'var(--teal-primary)', fontFeatureSettings: '"tnum"' }}>
                 {formatSeconds(liveTotalSec)}
+              </div>
+              <div style={{ fontSize: '0.82rem', color: enteredCount === 16 ? 'var(--success-emerald)' : 'var(--gold-hyrox)', fontWeight: 600, marginTop: 2 }}>
+                {enteredCount} of 16 legs entered
               </div>
             </div>
 
@@ -148,45 +171,48 @@ export default function LogSession() {
           </div>
         </div>
 
-        {/* 16-Leg Rapid Entry Grid */}
+        {/* 16-Leg Rapid Entry Grid with Auto-Colon */}
         <div className="card">
           <h2 className="card-title">16-Leg Split Entry (8 Runs + 8 Stations)</h2>
           <p className="muted" style={{ margin: '0 0 16px', fontSize: '0.82rem' }}>
-            Enter split times in <code style={{ color: 'var(--teal-primary)' }}>m:ss</code> format (e.g. 4:15).
+            Auto-formats as you type digits on mobile (e.g. typing <code style={{ color: 'var(--teal-primary)' }}>430</code> becomes <code style={{ color: 'var(--teal-primary)' }}>4:30</code>).
           </p>
 
           <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-            {LEGS.map((leg) => (
-              <label
-                key={leg.leg}
-                style={{
-                  background: leg.isRun ? 'var(--bg-navy)' : 'var(--surface-elevated)',
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  border: '1px solid var(--border-subtle)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.78rem', color: leg.isRun ? 'var(--text-muted)' : 'var(--teal-primary)' }}>
-                    #{leg.leg} {leg.label}
-                  </span>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-subtle)' }}>
-                    {leg.isRun ? 'RUN' : 'WORKOUT'}
-                  </span>
-                </div>
-                <input
-                  placeholder="m:ss"
-                  value={times[leg.leg]}
-                  onChange={(e) => setTimes({ ...times, [leg.leg]: e.target.value })}
-                  inputMode="numeric"
-                  style={{ marginTop: 4, textAlign: 'center', fontWeight: 700, fontFeatureSettings: '"tnum"' }}
-                />
-              </label>
-            ))}
+            {LEGS.map((leg) => {
+              const val = times[leg.leg];
+              const isFilled = val && !Number.isNaN(parseTime(val));
+              return (
+                <label
+                  key={leg.leg}
+                  style={{
+                    background: leg.isRun ? 'var(--bg-navy)' : 'var(--surface-elevated)',
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: isFilled ? '1px solid var(--teal-primary)' : '1px solid var(--border-subtle)',
+                    transition: 'border-color 0.15s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.78rem', color: leg.isRun ? 'var(--text-muted)' : 'var(--teal-primary)' }}>
+                      #{leg.leg} {leg.label}
+                    </span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-subtle)' }}>
+                      {leg.isRun ? 'RUN' : 'WORKOUT'}
+                    </span>
+                  </div>
+                  <input
+                    placeholder="m:ss"
+                    value={times[leg.leg]}
+                    onChange={(e) => handleSplitChange(leg.leg, e.target.value)}
+                    inputMode="numeric"
+                    style={{ marginTop: 4, textAlign: 'center', fontWeight: 700, fontFeatureSettings: '"tnum"' }}
+                  />
+                </label>
+              );
+            })}
           </div>
         </div>
-
-        {error && <p className="error">{error}</p>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
           <button type="submit" disabled={busy} style={{ padding: '12px 28px', fontSize: '1rem' }}>
